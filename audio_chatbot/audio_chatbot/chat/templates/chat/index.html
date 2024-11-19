@@ -1,0 +1,425 @@
+
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Audio Chat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            width: 100%;
+            min-height: 100vh;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 15px;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin: 20px 0;
+            font-size: clamp(1.5rem, 4vw, 2.5rem);
+        }
+
+        .status-indicator {
+            padding: clamp(8px, 2vw, 15px);
+            margin: 10px 0;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+            font-size: clamp(0.9rem, 2vw, 1.1rem);
+        }
+
+        .connected { 
+            background-color: #90EE90; 
+            color: #006400;
+        }
+
+        .disconnected { 
+            background-color: #FFB6C1; 
+            color: #8B0000;
+        }
+
+        .speaking { 
+            background-color: #87CEEB; 
+            color: #00008B;
+        }
+
+        .waiting { 
+            background-color: #FFE4B5; 
+            color: #8B4513;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: clamp(10px, 2vw, 20px);
+            margin: 20px 0;
+        }
+
+        button {
+            padding: clamp(8px, 2vw, 15px) clamp(15px, 3vw, 25px);
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: clamp(0.9rem, 2vw, 1.1rem);
+            transition: all 0.3s ease;
+            width: clamp(120px, 30vw, 200px);
+        }
+
+        #startButton {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        #stopButton {
+            background-color: #f44336;
+            color: white;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button:hover:not(:disabled) {
+            transform: scale(1.05);
+        }
+
+        .conversation-container {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        @media (min-width: 768px) {
+            .conversation-container {
+                flex-direction: row;
+            }
+        }
+
+        .transcription-box, .ai-response-box {
+            flex: 1;
+            padding: clamp(10px, 3vw, 20px);
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            min-height: 200px;
+        }
+
+        .transcription-box h3, .ai-response-box h3 {
+            margin-bottom: 15px;
+            color: #333;
+            text-align: center;
+            font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+        }
+
+        #transcriptionText, #aiResponse {
+            white-space: pre-wrap;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            line-height: 1.5;
+            min-height: 100px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 3px;
+            overflow-wrap: break-word;
+        }
+
+        #debugInfo {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+        }
+
+        .visualizer {
+            width: 100%;
+            height: clamp(80px, 15vw, 120px);
+            background-color: #000;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 10px 0;
+            color: #666;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .loading:after {
+            content: '...';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60% { content: '...'; }
+            80% { content: '....'; }
+            100% { content: '.....'; }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            button {
+                width: 100%;
+                max-width: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Audio Chat</h1>
+        <div id="status" class="status-indicator disconnected">Disconnected</div>
+        
+        <div class="controls">
+            <button id="startButton">Start Recording</button>
+            <button id="stopButton" disabled>Stop Recording</button>
+        </div>
+
+        <div id="speechStatus" class="status-indicator">Not speaking</div>
+        <canvas id="visualizer" class="visualizer"></canvas>
+        
+        <div class="loading" id="processingStatus">Processing audio</div>
+
+        <div class="conversation-container">
+            <div class="transcription-box">
+                <h3>Transcription</h3>
+                <div id="transcriptionText">Your speech will appear here...</div>
+            </div>
+            <div class="ai-response-box">
+                <h3>AI Response</h3>
+                <div id="aiResponse">AI response will appear here...</div>
+            </div>
+        </div>
+
+        <div id="debugInfo"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            let mediaRecorder;
+            let socket;
+            let audioContext;
+            let isRecording = false;
+            let analyser;
+            let visualizerCanvas;
+            let canvasCtx;
+
+            const startButton = document.getElementById('startButton');
+            const stopButton = document.getElementById('stopButton');
+            const statusDiv = document.getElementById('status');
+            const speechStatusDiv = document.getElementById('speechStatus');
+            const debugInfo = document.getElementById('debugInfo');
+            const processingStatus = document.getElementById('processingStatus');
+            visualizerCanvas = document.getElementById('visualizer');
+            canvasCtx = visualizerCanvas.getContext('2d');
+
+            function connectWebSocket() {
+                socket = new WebSocket('ws://' + window.location.host + '/ws/audio/');
+
+                socket.onopen = function(e) {
+                    statusDiv.textContent = 'Connected';
+                    statusDiv.className = 'status-indicator connected';
+                    startButton.disabled = false;
+                };
+
+                socket.onclose = function(e) {
+                    statusDiv.textContent = 'Disconnected';
+                    statusDiv.className = 'status-indicator disconnected';
+                    startButton.disabled = true;
+                    stopButton.disabled = true;
+                    setTimeout(connectWebSocket, 1000);
+                };
+
+                socket.onmessage = function(e) {
+                    const data = JSON.parse(e.data);
+                    console.log('Message received:', data);
+
+                    if (data.type === 'transcription') {
+                        processingStatus.classList.remove('active');
+                        document.getElementById('transcriptionText').textContent = data.text;
+                        document.getElementById('aiResponse').textContent = data.ai_response;
+                    } else if (data.type === 'error') {
+                        processingStatus.classList.remove('active');
+                        console.error('Error:', data.message);
+                        document.getElementById('debugInfo').textContent = 'Error: ' + data.message;
+                    } else if (data.type === 'speech_status') {
+                        switch(data.status) {
+                            case 'waiting':
+                                speechStatusDiv.textContent = 'Waiting for speech...';
+                                speechStatusDiv.className = 'status-indicator waiting';
+                                break;
+                            case 'started':
+                                speechStatusDiv.textContent = 'Speaking';
+                                speechStatusDiv.className = 'status-indicator speaking';
+                                break;
+                            case 'ended':
+                                speechStatusDiv.textContent = 'Not speaking';
+                                speechStatusDiv.className = 'status-indicator';
+                                break;
+                        }
+                    }
+                };
+            }
+
+            function drawVisualizer() {
+                if (!isRecording) return;
+
+                requestAnimationFrame(drawVisualizer);
+
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+                analyser.getByteTimeDomainData(dataArray);
+
+                canvasCtx.fillStyle = 'rgb(0, 0, 0)';
+                canvasCtx.fillRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+
+                canvasCtx.lineWidth = 2;
+                canvasCtx.strokeStyle = 'rgb(0, 255, 0)';
+                canvasCtx.beginPath();
+
+                const sliceWidth = visualizerCanvas.width * 1.0 / bufferLength;
+                let x = 0;
+
+                for (let i = 0; i < bufferLength; i++) {
+                    const v = dataArray[i] / 128.0;
+                    const y = v * visualizerCanvas.height / 2;
+
+                    if (i === 0) {
+                        canvasCtx.moveTo(x, y);
+                    } else {
+                        canvasCtx.lineTo(x, y);
+                    }
+
+                    x += sliceWidth;
+                }
+
+                canvasCtx.lineTo(visualizerCanvas.width, visualizerCanvas.height / 2);
+                canvasCtx.stroke();
+            }
+
+            async function startRecording() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            channelCount: 1,
+                            sampleRate: 16000,
+                            echoCancellation: true,
+                            noiseSuppression: true
+                        }
+                    });
+
+                    audioContext = new AudioContext({
+                        sampleRate: 16000
+                    });
+
+                    const source = audioContext.createMediaStreamSource(stream);
+                    analyser = audioContext.createAnalyser();
+                    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+                    source.connect(analyser);
+                    analyser.connect(processor);
+                    processor.connect(audioContext.destination);
+
+                    visualizerCanvas.width = visualizerCanvas.offsetWidth;
+                    visualizerCanvas.height = visualizerCanvas.offsetHeight;
+                    drawVisualizer();
+
+                    processor.onaudioprocess = function(e) {
+                        if (isRecording && socket.readyState === WebSocket.OPEN) {
+                            const inputData = e.inputBuffer.getChannelData(0);
+                            const pcmData = new Int16Array(inputData.length);
+                            for (let i = 0; i < inputData.length; i++) {
+                                pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
+                            }
+                            socket.send(pcmData.buffer);
+                        }
+                    };
+
+                    isRecording = true;
+                    startButton.disabled = true;
+                    stopButton.disabled = false;
+                    document.getElementById('transcriptionText').textContent = 'Recording...';
+                    document.getElementById('aiResponse').textContent = 'Waiting for transcription...';
+
+                    socket.send(JSON.stringify({
+                        type: 'recording_state',
+                        state: 'started'
+                    }));
+
+                } catch (err) {
+                    console.error('Error starting recording:', err);
+                    debugInfo.textContent = 'Error: ' + err.message;
+                }
+            }
+
+            function stopRecording() {
+                isRecording = false;
+                if (audioContext) {
+                    audioContext.close();
+                }
+                startButton.disabled = false;
+                stopButton.disabled = true;
+
+                // Clear visualizer
+                canvasCtx.fillStyle = 'rgb(0, 0, 0)';
+                canvasCtx.fillRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+
+                processingStatus.classList.add('active');
+
+                socket.send(JSON.stringify({
+                    type: 'recording_state',
+                    state: 'stopped'
+                }));
+            }
+
+            startButton.onclick = startRecording;
+            stopButton.onclick = stopRecording;
+
+            // Handle window resize for visualizer
+            window.onresize = function() {
+                if (visualizerCanvas) {
+                    visualizerCanvas.width = visualizerCanvas.offsetWidth;
+                    visualizerCanvas.height = visualizerCanvas.offsetHeight;
+                }
+            };
+
+            // Connect WebSocket when page loads
+            connectWebSocket();
+        });
+    </script>
+</body>
+</html>
